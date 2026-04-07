@@ -1,0 +1,139 @@
+---
+title: "Implementasi MANOVA dan MANCOVA pada Student Mental Health and Burnout"
+author: "Muhammad Khoirul Ilham (24031554193),Hulwah Fatin Fathinah (24031554007),
+Firda Nurkhairani (24031554209)
+"
+date: "2026-04-07"
+output: html_document
+---
+## Pendahuluan
+
+Kesehatan mental mahasiswa menjadi salah satu isu penting dalam dunia pendidikan, terutama berkaitan dengan tingkat stres, kecemasan, dan depresi. Faktor-faktor seperti beban akademik, pola tidur, dan perbedaan karakteristik individu seperti gender diduga memiliki pengaruh terhadap kondisi tersebut.
+
+Penelitian ini bertujuan untuk menganalisis pengaruh gender terhadap kondisi kesehatan mental mahasiswa yang diukur melalui variabel stress level, anxiety score, dan depression score. Selain itu, digunakan metode Multivariate Analysis of Covariance (MANCOVA) untuk mengontrol variabel kovariat berupa durasi tidur (sleep_hours), sehingga hasil analisis menjadi lebih akurat.
+
+
+### Load Library
+```{r}
+library(readr)
+library(dplyr)
+library(psych)
+library(car)
+library(biotools)
+library(ggplot2)
+library(corrplot)
+```
+
+### Load Data
+```{r}
+Dataset <- read_csv("student_mental_health_burnout.csv")
+str(Dataset)
+```
+
+### Data Preparation
+
+Pada tahap ini dilakukan proses pembersihan dan seleksi data. Data diambil secara acak sebanyak 200 observasi untuk mempermudah proses analisis dan menghindari masalah komputasi.
+
+Selanjutnya dipilih variabel yang relevan dengan penelitian, yaitu gender sebagai variabel independen, stress level, anxiety score, dan depression score sebagai variabel dependen, serta sleep_hours sebagai variabel kovariat.
+
+Data yang memiliki missing value dihapus menggunakan fungsi na.omit(), dan variabel kategorikal seperti gender diubah menjadi tipe faktor agar dapat dianalisis dengan metode MANOVA dan MANCOVA.
+
+```{r}
+summary(Dataset)
+```
+
+```{r}
+set.seed(123)
+Dataset_sample <- Dataset[sample(nrow(Dataset), 200), ]
+Dataset_baru <- Dataset_sample[, c("gender","stress_level","anxiety_score","depression_score","study_hours_per_day","academic_year","sleep_hours","screen_time","financial_stress","burnout_score")]
+```
+```{r}
+Dataset_baru <- na.omit(Dataset_baru)
+dim(Dataset_baru)
+```
+```{r}
+Dataset_manova <- Dataset_baru[, c("gender","stress_level","anxiety_score","depression_score")]
+```
+```{r}
+Dataset_manova$gender <- as.factor(Dataset_manova$gender)
+```
+### Analisis Deskriptif
+
+Analisis deskriptif dilakukan untuk melihat gambaran umum data berdasarkan gender.
+```{r}
+describe(Dataset_manova)
+```
+```{r}
+Dataset_manova %>%
+group_by(gender) %>%
+summarise(
+mean_stress = mean(stress_level),
+mean_anxiety = mean(anxiety_score),
+mean_depression = mean(depression_score),
+.groups = "drop")
+```
+### Visualisasi Data
+
+Visualisasi menggunakan boxplot untuk melihat perbedaan distribusi tingkat stres berdasarkan gender.
+```{r}
+ggplot(Dataset_manova, aes(x = gender, y = stress_level, fill = gender)) +
+  geom_boxplot()
+```
+
+### Uji Asumsi
+
+Sebelum dilakukan analisis MANOVA, dilakukan uji asumsi untuk memastikan bahwa data memenuhi syarat analisis multivariat. Uji yang dilakukan meliputi uji korelasi antar variabel dependen, uji Bartlett, serta uji Box's M untuk kesamaan matriks kovarians.
+
+#### Korelasi antar variabel
+```{r}
+Y <- Dataset_baru[, c("stress_level", "anxiety_score", "depression_score")]
+cor(Y)
+```
+#### Bartlett Test
+```{r}
+cortest.bartlett(cor(Y), n = nrow(Y))
+```
+#### Box’s M Test
+```{r}
+Dataset_baru$group <- Dataset_baru$gender
+biotools::boxM(Y, Dataset_baru$group)
+```
+## Analisis MANOVA
+
+Analisis MANOVA digunakan untuk menguji apakah terdapat perbedaan tingkat stress, anxiety, dan depression berdasarkan gender.
+```{r}
+model_manova <- manova(
+  cbind(stress_level, anxiety_score, depression_score) ~ gender,
+  data = Dataset_manova
+)
+
+summary(model_manova, test = "Wilks")
+summary.aov(model_manova)
+```
+Hasil uji MANOVA menunjukkan bahwa nilai Wilks' Lambda digunakan untuk menentukan signifikansi pengaruh gender terhadap variabel dependen secara simultan. Jika nilai p-value < 0.05, maka dapat disimpulkan bahwa terdapat perbedaan yang signifikan berdasarkan gender.
+
+## Analisis MANCOVA
+Analisis MANCOVA dilakukan dengan menambahkan variabel kovariat yaitu sleep_hours untuk mengontrol pengaruh durasi tidur terhadap kondisi kesehatan mental mahasiswa.
+```{r}
+Dataset_mancova <- Dataset_baru[, c("gender","stress_level","anxiety_score","depression_score","sleep_hours")]
+```
+
+```{r}
+model_mancova <- manova(
+  cbind(stress_level, anxiety_score, depression_score) ~ gender + sleep_hours,
+  data = Dataset_mancova
+)
+summary(model_mancova, test = "Wilks")
+summary.aov(model_mancova)
+```
+Hasil MANCOVA menunjukkan bahwa setelah mengontrol variabel sleep_hours, pengaruh gender terhadap stress, anxiety, dan depression dapat dianalisis dengan lebih akurat. 
+
+Jika nilai p-value < 0.05, maka dapat disimpulkan bahwa gender memiliki pengaruh signifikan terhadap kondisi kesehatan mental mahasiswa setelah mempertimbangkan durasi tidur.
+
+## Korelasi
+
+korelasi dilakukan untuk melihat hubungan antar variabel, baik antar variabel dependen maupun dengan variabel kovariat.
+```{r}
+mat_korelasi <- cor(Dataset_mancova[, c("stress_level","anxiety_score","depression_score","sleep_hours")])
+corrplot(mat_korelasi, method = "color", addCoef.col = "black")
+```
